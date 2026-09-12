@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { SCHEMAS, TABLES, MAX_CONNECTIONS } from "../lib/data";
+import { SCHEMAS, TABLES, MAX_CONNECTIONS, ROWS } from "../lib/data";
 import { Pill, Lock, Dot } from "./Chrome";
 import { RowEditor } from "./RowEditor";
 
@@ -22,10 +22,13 @@ export function TableView({ table }) {
       const data = await res.json();
       setRows(data.rows || []);
     } catch {
-      setRows([]);
+      // API/database unreachable — fall back to the static seed rows
+      // rather than rendering an empty table.
+      const fallback = ROWS[table] || [];
+      setRows(fallback.map((cells) => Object.fromEntries(schema.map((c, i) => [c.key, cells[i]]))));
     }
     setLoading(false);
-  }, [table]);
+  }, [table, schema]);
 
   useEffect(() => {
     if (schema) load();

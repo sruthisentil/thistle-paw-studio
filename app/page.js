@@ -5,15 +5,17 @@ import { TopBar, Sidebar, TableList, StatusBar } from "../components/Chrome";
 import { TableView, ConnectionsView, AppConfigView } from "../components/Views";
 import { RightRail } from "../components/RightRail";
 import { TeachDrawer } from "../components/TeachDrawer";
-import { MAX_CONNECTIONS } from "../lib/data";
+import { MAX_CONNECTIONS, APPS, INCIDENTS } from "../lib/data";
 import { buildAgentScript } from "../lib/agentScript";
 
 export default function Page() {
   const [view, setView] = useState("tables");
   const [table, setTable] = useState("prescriptions");
   const [openAppId, setOpenAppId] = useState(null);
-  const [apps, setApps] = useState([]);
-  const [incidents, setIncidents] = useState([]);
+  // Seed state with the known incident, not empty arrays — an unreachable
+  // or not-yet-seeded database must never render as a healthy dashboard.
+  const [apps, setApps] = useState(APPS);
+  const [incidents, setIncidents] = useState(INCIDENTS);
 
   const [drawerOpen, setDrawerOpen] = useState(true);
 
@@ -28,17 +30,25 @@ export default function Page() {
 
   /* ------------------------------------------------------------ live data
    * Applications and incidents are read from the local Postgres database
-   * on mount (see lib/db.js, app/api/apps, app/api/incidents).
+   * on mount (see lib/db.js, app/api/apps, app/api/incidents), replacing
+   * the static lib/data.js fallback above once live data actually arrives.
+   * If the API is unreachable or the tables are somehow empty, the initial
+   * state stands — the demo keeps showing the real incident instead of
+   * quietly going healthy because a fetch failed.
    * ------------------------------------------------------------------------ */
 
   useEffect(() => {
     fetch("/api/apps")
       .then((r) => r.json())
-      .then((d) => setApps(d.apps || []))
+      .then((d) => {
+        if (d.apps?.length) setApps(d.apps);
+      })
       .catch(() => {});
     fetch("/api/incidents")
       .then((r) => r.json())
-      .then((d) => setIncidents(d.incidents || []))
+      .then((d) => {
+        if (d.incidents?.length) setIncidents(d.incidents);
+      })
       .catch(() => {});
   }, []);
 
