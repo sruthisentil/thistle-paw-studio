@@ -1,14 +1,31 @@
 "use client";
 
-import { useState } from "react";
-import { SCHEMAS, ROWS, TABLES, MAX_CONNECTIONS } from "../lib/data";
+import { useEffect, useState, useCallback } from "react";
+import { SCHEMAS, TABLES, MAX_CONNECTIONS } from "../lib/data";
 import { Pill, Lock, Dot } from "./Chrome";
+import { RowEditor } from "./RowEditor";
 
 /* ---------------------------------------------------------------- table view */
 
 export function TableView({ table }) {
   const schema = SCHEMAS[table];
-  const rows = ROWS[table];
+  const pkKey = schema?.[0]?.key;
+
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(null); // { mode: "insert" | "edit", row? }
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const res = await fetch(`/api/tables/${table}`);
+    const data = await res.json();
+    setRows(data.rows || []);
+    setLoading(false);
+  }, [table]);
+
+  useEffect(() => {
+    if (schema) load();
+  }, [schema, load]);
 
   if (!schema) {
     return (
@@ -21,6 +38,31 @@ export function TableView({ table }) {
 
   const meta = TABLES.find((t) => t.name === table);
 
+  async function handleInsert(values) {
+    await fetch(`/api/tables/${table}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ values }),
+    });
+    setEditing(null);
+    load();
+  }
+
+  async function handleEdit(values) {
+    await fetch(`/api/tables/${table}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: editing.row[pkKey], values }),
+    });
+    setEditing(null);
+    load();
+  }
+
+  async function handleDelete(row) {
+    await fetch(`/api/tables/${table}?id=${encodeURIComponent(row[pkKey])}`, { method: "DELETE" });
+    load();
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-end gap-3 px-5 pb-3 pt-4">
@@ -31,7 +73,7 @@ export function TableView({ table }) {
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <Btn label="Insert row" primary action={`insert:${table}`} />
+          <Btn label="Insert row" primary action={`insert:${table}`} onClick={() => setEditing({ mode: "insert" })} />
           <Btn label="Import data" action={`import:${table}`} />
           <Btn label="Filter" action={`filter:${table}`} />
           <Btn label="Sort" action={`sort:${table}`} />
@@ -54,34 +96,64 @@ export function TableView({ table }) {
                     </span>
                   </th>
                 ))}
+                <th className="w-20 px-3 py-2 font-normal text-muted"></th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((row, i) => (
-                <tr key={i} className="border-b border-line/70 hover:bg-raised/60">
-                  {row.map((cell, j) => {
-                    const col = schema[j];
-                    return (
-                      <td
-                        key={j}
-                        className={`whitespace-nowrap border-r border-line/50 px-3 py-[7px] ${
-                          col.masked ? "font-mono text-[11.5px] text-faint" : "text-fg/90"
-                        }`}
-                      >
-                        {col.pill ? <Pill value={cell} /> : cell}
-                      </td>
-                    );
-                  })}
+              {!loading && rows.length === 0 && (
+                <tr>
+                  <td colSpan={schema.length + 1} className="px-3 py-6 text-center text-faint">
+                    No rows yet. Insert one to get started.
+                  </td>
+                </tr>
+              )}
+              {rows.map((row) => (
+                <tr key={row[pkKey]} className="border-b border-line/70 hover:bg-raised/60">
+                  {schema.map((col) => (
+                    <td
+                      key={col.key}
+                      className={`whitespace-nowrap border-r border-line/50 px-3 py-[7px] ${
+                        col.masked ? "font-mono text-[11.5px] text-faint" : "text-fg/90"
+                      }`}
+                    >
+                      {col.pill ? <Pill value={row[col.key]} /> : String(row[col.key])}
+                    </td>
+                  ))}
+                  <td className="whitespace-nowrap px-3 py-[7px] text-right">
+                    <button
+                      onClick={() => setEditing({ mode: "edit", row })}
+                      className="mr-2 text-[11.5px] text-muted hover:text-fg"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(row)}
+                      className="text-[11.5px] text-muted hover:text-danger"
+                    >
+                      Delete
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
         <div className="flex h-9 shrink-0 items-center gap-3 border-t border-line px-3 text-[11.5px] text-muted">
-          <span>100 rows per page</span>
+          <span>{rows.length} row{rows.length === 1 ? "" : "s"} on this page</span>
           <span className="ml-auto">Page 1 of {Math.ceil((meta?.records || 0) / 100).toLocaleString()}</span>
         </div>
       </div>
+
+      {editing && (
+        <RowEditor
+          schema={schema}
+          pkKey={pkKey}
+          mode={editing.mode}
+          initial={editing.row}
+          onCancel={() => setEditing(null)}
+          onSubmit={editing.mode === "insert" ? handleInsert : handleEdit}
+        />
+      )}
     </div>
   );
 }
@@ -277,10 +349,11 @@ function Stat({ label, value, hint, tone }) {
   );
 }
 
-function Btn({ label, primary, action }) {
+function Btn({ label, primary, action, onClick }) {
   return (
     <button
       data-action={action}
+      onClick={onClick}
       className={`rounded px-2.5 py-1.5 text-[12px] transition-colors ${
         primary
           ? "bg-brand text-ink hover:bg-brand/90"

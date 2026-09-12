@@ -1,18 +1,19 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { TopBar, Sidebar, TableList, StatusBar } from "../components/Chrome";
 import { TableView, ConnectionsView, AppConfigView } from "../components/Views";
 import { RightRail } from "../components/RightRail";
 import { TeachDrawer } from "../components/TeachDrawer";
-import { APPS, MAX_CONNECTIONS, INCIDENTS } from "../lib/data";
+import { MAX_CONNECTIONS } from "../lib/data";
 import { buildAgentScript } from "../lib/agentScript";
 
 export default function Page() {
   const [view, setView] = useState("tables");
   const [table, setTable] = useState("prescriptions");
   const [openAppId, setOpenAppId] = useState(null);
-  const [apps, setApps] = useState(APPS);
+  const [apps, setApps] = useState([]);
+  const [incidents, setIncidents] = useState([]);
 
   const [drawerOpen, setDrawerOpen] = useState(true);
 
@@ -24,6 +25,20 @@ export default function Page() {
   const timers = useRef([]);
 
   const connections = apps.reduce((s, a) => s + a.workers * a.pool, 0);
+
+  /* ------------------------------------------------------------ live data
+   * Applications and incidents are read from the local Postgres database
+   * on mount (see lib/db.js, app/api/apps, app/api/incidents).
+   * ------------------------------------------------------------------------ */
+
+  useEffect(() => {
+    fetch("/api/apps")
+      .then((r) => r.json())
+      .then((d) => setApps(d.apps || []));
+    fetch("/api/incidents")
+      .then((r) => r.json())
+      .then((d) => setIncidents(d.incidents || []));
+  }, []);
 
   /* ------------------------------------------------------------ agent feed */
 
@@ -44,6 +59,7 @@ export default function Page() {
   }
 
   function investigate(inc) {
+    if (!inc) return;
     setActiveIncident(inc.id);
     setView("connections");
     setOpenAppId(null);
@@ -51,6 +67,11 @@ export default function Page() {
 
   function applyPool(appId, pool) {
     setApps((prev) => prev.map((a) => (a.id === appId ? { ...a, pool } : a)));
+    fetch(`/api/apps/${appId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ pool }),
+    });
   }
 
   /* ------------------------------------------------------------ agent replay
@@ -122,7 +143,7 @@ export default function Page() {
               </div>
               <button
                 data-action="banner:investigate"
-                onClick={() => investigate(INCIDENTS[0])}
+                onClick={() => investigate(incidents.find((i) => i.live) || incidents[0])}
                 className="ml-auto shrink-0 rounded border border-danger/40 px-2.5 py-1 text-[12px] text-danger hover:bg-danger/10"
               >
                 Investigate
@@ -174,6 +195,7 @@ export default function Page() {
 
         <RightRail
           connections={connections}
+          incidents={incidents}
           onInvestigate={investigate}
           activeIncident={activeIncident}
         />

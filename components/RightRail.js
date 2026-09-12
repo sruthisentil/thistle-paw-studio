@@ -1,6 +1,6 @@
 "use client";
 
-import { INCIDENTS, ACTIVITY, SPARK, MAX_CONNECTIONS } from "../lib/data";
+import { ACTIVITY, SPARK, MAX_CONNECTIONS } from "../lib/data";
 import { Spark, Dot } from "./Chrome";
 
 function Metric({ label, value, unit, points, tone }) {
@@ -18,10 +18,10 @@ function Metric({ label, value, unit, points, tone }) {
   );
 }
 
-export function RightRail({ connections, onInvestigate, activeIncident }) {
+export function RightRail({ connections, incidents, onInvestigate, activeIncident }) {
   const hot = connections / MAX_CONNECTIONS > 0.9;
-  const live = INCIDENTS.filter((i) => i.live);
-  const backlog = INCIDENTS.filter((i) => !i.live);
+  const live = incidents.filter((i) => i.live);
+  const backlog = incidents.filter((i) => !i.live);
 
   return (
     <aside className="flex w-[310px] shrink-0 flex-col overflow-y-auto border-l border-line bg-panel">
@@ -44,7 +44,7 @@ export function RightRail({ connections, onInvestigate, activeIncident }) {
 
       <div className="flex items-center gap-2 border-b border-line px-4 py-3">
         <span className="text-[13px] font-medium">Incidents</span>
-        <span className="ml-auto text-[11.5px] text-faint">{INCIDENTS.length} open</span>
+        <span className="ml-auto text-[11.5px] text-faint">{incidents.length} open</span>
       </div>
 
       <div className="border-b border-line">
@@ -109,9 +109,12 @@ function IncidentRow({ inc, dim, active, onInvestigate }) {
             <span className="truncate text-[12.5px] text-fg">{inc.title}</span>
             <span className="ml-auto shrink-0 font-mono text-[11px] text-faint">{inc.code}</span>
           </div>
-          <div className="pt-0.5 text-[11.5px] text-muted">
-            {inc.resource} · {inc.count ? `seen ${inc.count}× · ` : ""}
-            {inc.seen}
+          <div className="flex items-center gap-2 pt-0.5">
+            <div className="min-w-0 flex-1 text-[11.5px] text-muted">
+              {inc.resource} · {inc.count ? `seen ${inc.count}× · ` : ""}
+              {inc.seen}
+            </div>
+            {inc.history?.length > 1 && <Spark points={inc.history} tone={tone} w={56} h={18} />}
           </div>
           <button
             data-action={`investigate:${inc.id}`}
