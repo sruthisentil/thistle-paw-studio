@@ -30,3 +30,6 @@ body {
   50% { box-shadow: 0 0 0 3px rgba(62,207,142,0.45); }
 }
 .agent-target { animation: agentglow 1.1s ease-in-out infinite; border-color: #3ecf8e !important; }
+
+@keyframes incidentIn { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+.incident-in { animation: incidentIn 200ms ease-out; }

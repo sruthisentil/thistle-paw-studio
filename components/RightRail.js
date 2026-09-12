@@ -2,6 +2,7 @@
 
 import { ACTIVITY, SPARK, MAX_CONNECTIONS } from "../lib/data";
 import { Spark, Dot } from "./Chrome";
+import { useIncidentFeed, formatRelativeTime } from "../lib/incidentFeed";
 
 function Metric({ label, value, unit, points, tone }) {
   return (
@@ -20,8 +21,12 @@ function Metric({ label, value, unit, points, tone }) {
 
 export function RightRail({ connections, incidents, onInvestigate, activeIncident }) {
   const hot = connections / MAX_CONNECTIONS > 0.9;
-  const live = incidents.filter((i) => i.live);
-  const backlog = incidents.filter((i) => !i.live);
+  // The 53300 connection-saturation incident is pinned, static, and never
+  // resolves on its own — it comes from lib/data.js (or the live DB mirror
+  // of it), never from the generated feed below.
+  const pinned = incidents.filter((i) => i.live);
+  const { incidents: feed, openCount, paused, pause, resume, now } = useIncidentFeed();
+  const totalOpen = pinned.length + openCount;
 
   return (
     <aside className="flex w-[310px] shrink-0 flex-col overflow-y-auto border-l border-line bg-panel">
@@ -44,14 +49,23 @@ export function RightRail({ connections, incidents, onInvestigate, activeInciden
 
       <div className="flex items-center gap-2 border-b border-line px-4 py-3">
         <span className="text-[13px] font-medium">Incidents</span>
-        <span className="ml-auto text-[11.5px] text-faint">{incidents.length} open</span>
+        <button
+          data-action="incidents:toggle-feed"
+          onClick={paused ? resume : pause}
+          title={paused ? "Resume incident feed" : "Pause incident feed"}
+          className="ml-auto rounded px-1.5 py-0.5 text-[10.5px] text-faint hover:text-fg"
+        >
+          {paused ? "▶ paused" : "‖ live"}
+        </button>
+        <span className="text-[11.5px] text-faint">{totalOpen} open</span>
       </div>
 
       <div className="border-b border-line">
-        {live.map((inc) => (
+        {pinned.map((inc) => (
           <IncidentRow
             key={inc.id}
             inc={inc}
+            seenLabel={inc.seen}
             active={activeIncident === inc.id}
             onInvestigate={onInvestigate}
           />
@@ -62,11 +76,14 @@ export function RightRail({ connections, incidents, onInvestigate, activeInciden
         Unresolved · nobody has had time
       </div>
       <div>
-        {backlog.map((inc) => (
+        {feed.map((inc) => (
           <IncidentRow
             key={inc.id}
             inc={inc}
             dim
+            resolved={inc.resolved}
+            animateIn
+            seenLabel={formatRelativeTime(inc.lastSeen, now)}
             active={activeIncident === inc.id}
             onInvestigate={onInvestigate}
           />
@@ -94,11 +111,14 @@ export function RightRail({ connections, incidents, onInvestigate, activeInciden
   );
 }
 
-function IncidentRow({ inc, dim, active, onInvestigate }) {
+function IncidentRow({ inc, dim, active, resolved, animateIn, seenLabel, onInvestigate }) {
   const tone = inc.severity === "critical" ? "bad" : inc.severity === "warning" ? "warn" : "muted";
+  const fade = resolved ? "opacity-40 grayscale" : dim ? "opacity-75" : "";
   return (
     <div
-      className={`px-4 py-3 ${active ? "bg-brand/5" : ""} ${dim ? "opacity-75" : ""} border-b border-line/60`}
+      className={`border-b border-line/60 px-4 py-3 transition-opacity duration-500 ${
+        active ? "bg-brand/5" : ""
+      } ${fade} ${animateIn ? "incident-in" : ""}`}
     >
       <div className="flex items-start gap-2">
         <span className="pt-1.5">
@@ -111,8 +131,8 @@ function IncidentRow({ inc, dim, active, onInvestigate }) {
           </div>
           <div className="flex items-center gap-2 pt-0.5">
             <div className="min-w-0 flex-1 text-[11.5px] text-muted">
-              {inc.resource} · {inc.count ? `seen ${inc.count}× · ` : ""}
-              {inc.seen}
+              {inc.resource} · {inc.count > 1 ? `seen ${inc.count}× · ` : ""}
+              {seenLabel}
             </div>
             {inc.history?.length > 1 && <Spark points={inc.history} tone={tone} w={56} h={18} />}
           </div>

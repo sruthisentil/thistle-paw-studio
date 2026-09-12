@@ -144,7 +144,7 @@ export default function Page() {
         <Sidebar view={view} onNavigate={navigate} />
         {view === "tables" && <TableList active={table} onSelect={selectTable} />}
 
-        <main className="flex min-h-0 flex-1 flex-col">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
           {banner && (
             <div className="mx-5 mt-4 flex items-center gap-3 rounded border border-danger/30 bg-danger/10 px-4 py-2.5">
               <div className="min-w-0">
