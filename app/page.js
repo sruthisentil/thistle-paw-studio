@@ -6,6 +6,7 @@ import { TableView, ConnectionsView, AppConfigView } from "../components/Views";
 import { RightRail } from "../components/RightRail";
 import { TeachDrawer } from "../components/TeachDrawer";
 import { APPS, MAX_CONNECTIONS, INCIDENTS } from "../lib/data";
+import { buildAgentScript } from "../lib/agentScript";
 
 export default function Page() {
   const [view, setView] = useState("tables");
@@ -14,10 +15,6 @@ export default function Page() {
   const [apps, setApps] = useState(APPS);
 
   const [drawerOpen, setDrawerOpen] = useState(true);
-  const [drawerTab, setDrawerTab] = useState("teach");
-  const [recording, setRecording] = useState(false);
-  const [steps, setSteps] = useState([]);
-  const [workflows, setWorkflows] = useState([]);
 
   const [agentRunning, setAgentRunning] = useState(false);
   const [agentLog, setAgentLog] = useState([]);
@@ -28,72 +25,28 @@ export default function Page() {
 
   const connections = apps.reduce((s, a) => s + a.workers * a.pool, 0);
 
-  /* ------------------------------------------------------------ recording */
+  /* ------------------------------------------------------------ agent feed */
 
-  const record = useCallback(
-    (entry) => {
-      if (!recording) return;
-      setSteps((prev) => [...prev, entry]);
-    },
-    [recording]
-  );
-
-  function startStop() {
-    if (recording) {
-      setRecording(false);
-      if (steps.length) {
-        setWorkflows([
-          {
-            id: "WF-001",
-            name: "Resolve connection saturation",
-            code: "53300",
-            demonstrations: 2,
-            steps: [
-              "open incident",
-              "read connections by application",
-              "select application holding the most",
-              "read workers and connection budget",
-              "set pool per worker",
-              "apply and restart",
-              "rerun verification workload",
-            ],
-            formula: "pool = floor(budget / workers)",
-          },
-        ]);
-        setDrawerTab("workflows");
-      }
-    } else {
-      setSteps([]);
-      setAgentLog([]);
-      setRecording(true);
-      setDrawerTab("teach");
-      setDrawerOpen(true);
-    }
-  }
+  const pushAgentEvent = useCallback((entry) => {
+    setAgentLog((prev) => [...prev, entry]);
+  }, []);
 
   /* ------------------------------------------------------------ navigation */
 
   function navigate(v) {
     setView(v);
     setOpenAppId(null);
-    record({ action: `Opened ${v}`, target: `nav:${v}`, evidence: {} });
   }
 
   function selectTable(t) {
     setTable(t);
     setView("tables");
-    record({ action: `Opened table ${t}`, target: `table:${t}`, evidence: {} });
   }
 
   function investigate(inc) {
     setActiveIncident(inc.id);
     setView("connections");
     setOpenAppId(null);
-    record({
-      action: `Opened incident ${inc.id}`,
-      target: `investigate:${inc.id}`,
-      evidence: { code: inc.code, resource: inc.resource },
-    });
   }
 
   function applyPool(appId, pool) {
@@ -103,71 +56,22 @@ export default function Page() {
   /* ------------------------------------------------------------ agent replay
    * SWAP POINT — today this sequences the UI locally so the demo is visible.
    * On the box, replace with a websocket subscription to the agent's action
-   * stream: each message carries { action, target, evidence } exactly as below.
+   * stream: each message carries { action, evidence, note } and should be
+   * handed to pushAgentEvent exactly as the local script already does.
    * ------------------------------------------------------------------------ */
 
   function runAgent() {
-    const target = apps.find((a) => a.id === "checkout-worker");
-    const computed = Math.floor(target.budget / target.workers);
-
-    const script = [
-      {
-        delay: 400,
-        go: () => { setView("connections"); setOpenAppId(null); },
-        log: {
-          action: "Reading connections by application",
-          evidence: { capacity: MAX_CONNECTIONS, held: connections },
-        },
-      },
-      {
-        delay: 1300,
-        highlight: "open-app:checkout-worker",
-        log: {
-          action: "Selected checkout-worker as the responsible application",
-          evidence: { held: target.workers * target.pool, budget: target.budget },
-        },
-      },
-      {
-        delay: 1300,
-        go: () => { setOpenAppId("checkout-worker"); setView("apps"); },
-        highlight: null,
-        log: {
-          action: "Read worker count and connection budget",
-          evidence: { workers: target.workers, budget: target.budget },
-          note: "Values re-read from the application, not carried over from the demonstration.",
-        },
-      },
-      {
-        delay: 1400,
-        highlight: `set-pool:checkout-worker`,
-        log: {
-          action: "Computed pool per worker",
-          evidence: { formula: `floor(${target.budget}/${target.workers})`, result: computed },
-          note: "The demonstration used 5 on storefront-api. Recomputing gives a different answer here.",
-        },
-      },
-      {
-        delay: 1500,
-        highlight: `apply:checkout-worker`,
-        log: {
-          action: "Applied configuration and restarted workers",
-          evidence: { pool: computed, demand: computed * target.workers, budget: target.budget },
-        },
-      },
-      {
-        delay: 1400,
-        act: () => applyPool("checkout-worker", computed),
-        highlight: null,
-        log: {
-          action: "Verification workload passed",
-          evidence: { success_rate: "100%", throughput: "preserved", rows_changed: 0 },
-        },
-      },
-    ];
+    const script = buildAgentScript({
+      apps,
+      connections,
+      MAX_CONNECTIONS,
+      setView,
+      setOpenAppId,
+      applyPool,
+    });
 
     setAgentRunning(true);
     setAgentLog([]);
-    setDrawerTab("teach");
     setDrawerOpen(true);
 
     let t = 0;
@@ -181,7 +85,7 @@ export default function Page() {
           s.go?.();
           s.act?.();
           if (s.highlight !== undefined) setAgentTarget(s.highlight);
-          setAgentLog((prev) => [...prev, s.log]);
+          pushAgentEvent(s.log);
         }, t)
       );
     });
@@ -226,12 +130,11 @@ export default function Page() {
             </div>
           )}
 
-          {view === "tables" && <TableView table={table} onRecord={record} />}
+          {view === "tables" && <TableView table={table} />}
 
           {view === "connections" && (
             <ConnectionsView
               apps={apps}
-              onRecord={record}
               agentTarget={agentTarget}
               onOpenApp={(id) => {
                 setOpenAppId(id);
@@ -245,14 +148,12 @@ export default function Page() {
               <AppConfigView
                 key={openApp.id + openApp.pool}
                 app={openApp}
-                onRecord={record}
                 onApply={applyPool}
                 agentTarget={agentTarget}
               />
             ) : (
               <ConnectionsView
                 apps={apps}
-                onRecord={record}
                 agentTarget={agentTarget}
                 onOpenApp={(id) => setOpenAppId(id)}
               />
@@ -278,20 +179,7 @@ export default function Page() {
         />
       </div>
 
-      <TeachDrawer
-        open={drawerOpen}
-        onToggle={setDrawerOpen}
-        tab={drawerTab}
-        onTab={setDrawerTab}
-        recording={recording}
-        onStartStop={startStop}
-        steps={steps}
-        workflows={workflows}
-        onClear={() => { setSteps([]); setAgentLog([]); }}
-        onRunAgent={runAgent}
-        agentRunning={agentRunning}
-        agentLog={agentLog}
-      />
+      <TeachDrawer open={drawerOpen} onToggle={setDrawerOpen} entries={agentLog} />
 
       <StatusBar connections={connections} max={MAX_CONNECTIONS} />
     </div>

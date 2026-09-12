@@ -6,7 +6,7 @@ import { Pill, Lock, Dot } from "./Chrome";
 
 /* ---------------------------------------------------------------- table view */
 
-export function TableView({ table, onRecord }) {
+export function TableView({ table }) {
   const schema = SCHEMAS[table];
   const rows = ROWS[table];
 
@@ -31,10 +31,10 @@ export function TableView({ table, onRecord }) {
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <Btn label="Insert row" primary action={`insert:${table}`} onRecord={onRecord} />
-          <Btn label="Import data" action={`import:${table}`} onRecord={onRecord} />
-          <Btn label="Filter" action={`filter:${table}`} onRecord={onRecord} />
-          <Btn label="Sort" action={`sort:${table}`} onRecord={onRecord} />
+          <Btn label="Insert row" primary action={`insert:${table}`} />
+          <Btn label="Import data" action={`import:${table}`} />
+          <Btn label="Filter" action={`filter:${table}`} />
+          <Btn label="Sort" action={`sort:${table}`} />
         </div>
       </div>
 
@@ -88,7 +88,7 @@ export function TableView({ table, onRecord }) {
 
 /* ---------------------------------------------------------------- connections */
 
-export function ConnectionsView({ apps, onRecord, onOpenApp, agentTarget }) {
+export function ConnectionsView({ apps, onOpenApp, agentTarget }) {
   const total = apps.reduce((s, a) => s + a.workers * a.pool, 0);
   const sorted = [...apps].sort((a, b) => b.workers * b.pool - a.workers * a.pool);
 
@@ -158,14 +158,7 @@ export function ConnectionsView({ apps, onRecord, onOpenApp, agentTarget }) {
                   <td className="px-3 py-2.5 text-right">
                     <button
                       data-action={`open-app:${a.id}`}
-                      onClick={() => {
-                        onRecord?.({
-                          action: "Opened application configuration",
-                          target: `open-app:${a.id}`,
-                          evidence: { app: a.name, workers: a.workers, pool: a.pool, budget: a.budget, held },
-                        });
-                        onOpenApp(a.id);
-                      }}
+                      onClick={() => onOpenApp(a.id)}
                       className={`rounded border px-2 py-1 text-[11.5px] transition-colors ${
                         agentTarget === `open-app:${a.id}`
                           ? "agent-target border-brand text-brand"
@@ -187,7 +180,7 @@ export function ConnectionsView({ apps, onRecord, onOpenApp, agentTarget }) {
 
 /* ---------------------------------------------------------------- app config */
 
-export function AppConfigView({ app, onRecord, onApply, agentTarget }) {
+export function AppConfigView({ app, onApply, agentTarget }) {
   const [pool, setPool] = useState(app.pool);
   const demand = app.workers * pool;
   const fits = demand <= app.budget;
@@ -246,14 +239,7 @@ export function AppConfigView({ app, onRecord, onApply, agentTarget }) {
         <div className="mt-4 flex items-center gap-2 border-t border-line pt-4">
           <button
             data-action={`apply:${app.id}`}
-            onClick={() => {
-              onRecord?.({
-                action: "Applied connection pool change",
-                target: `apply:${app.id}`,
-                evidence: { app: app.name, workers: app.workers, budget: app.budget, pool, demand },
-              });
-              onApply(app.id, pool);
-            }}
+            onClick={() => onApply(app.id, pool)}
             className={`rounded px-3 py-1.5 text-[12.5px] font-medium transition-colors ${
               agentTarget === `apply:${app.id}`
                 ? "agent-target bg-brand text-ink"
@@ -291,11 +277,10 @@ function Stat({ label, value, hint, tone }) {
   );
 }
 
-function Btn({ label, primary, action, onRecord }) {
+function Btn({ label, primary, action }) {
   return (
     <button
       data-action={action}
-      onClick={() => onRecord?.({ action: label, target: action, evidence: {} })}
       className={`rounded px-2.5 py-1.5 text-[12px] transition-colors ${
         primary
           ? "bg-brand text-ink hover:bg-brand/90"
