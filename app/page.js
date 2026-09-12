@@ -55,7 +55,7 @@ export default function Page() {
   /* ------------------------------------------------------------ agent feed */
 
   const pushAgentEvent = useCallback((entry) => {
-    setAgentLog((prev) => [...prev, entry]);
+    setAgentLog((prev) => [...prev, { ...entry, at: Date.now() }]);
   }, []);
 
   /* ------------------------------------------------------------ navigation */
@@ -213,7 +213,12 @@ export default function Page() {
         />
       </div>
 
-      <TeachDrawer open={drawerOpen} onToggle={setDrawerOpen} entries={agentLog} />
+      <TeachDrawer
+        open={drawerOpen}
+        onToggle={setDrawerOpen}
+        entries={agentLog}
+        agentRunning={agentRunning}
+      />
 
       <StatusBar connections={connections} max={MAX_CONNECTIONS} />
     </div>
