@@ -17,9 +17,13 @@ export function TableView({ table }) {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const res = await fetch(`/api/tables/${table}`);
-    const data = await res.json();
-    setRows(data.rows || []);
+    try {
+      const res = await fetch(`/api/tables/${table}`);
+      const data = await res.json();
+      setRows(data.rows || []);
+    } catch {
+      setRows([]);
+    }
     setLoading(false);
   }, [table]);
 

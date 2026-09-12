@@ -34,10 +34,12 @@ export default function Page() {
   useEffect(() => {
     fetch("/api/apps")
       .then((r) => r.json())
-      .then((d) => setApps(d.apps || []));
+      .then((d) => setApps(d.apps || []))
+      .catch(() => {});
     fetch("/api/incidents")
       .then((r) => r.json())
-      .then((d) => setIncidents(d.incidents || []));
+      .then((d) => setIncidents(d.incidents || []))
+      .catch(() => {});
   }, []);
 
   /* ------------------------------------------------------------ agent feed */
